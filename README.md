@@ -1,1 +1,1 @@
-# Public_-IEEE_PHM_Data_Challenge_2014-
+# IEEE_PHM_Data_Challenge_2014
