@@ -300,6 +300,87 @@ def raw_eis_with_flipped_sign(curve: pd.DataFrame) -> pd.DataFrame:
     return raw.sort_values("fREQUENCY/hZ", ascending=False)
 
 
+def fit_circle(x: np.ndarray, y: np.ndarray) -> dict[str, float] | None:
+    if len(x) < 4:
+        return None
+
+    matrix = np.column_stack([x, y, np.ones_like(x)])
+    target = -(x**2 + y**2)
+    a, b, c = np.linalg.lstsq(matrix, target, rcond=None)[0]
+    center_x = -a / 2
+    center_y = -b / 2
+    radius_sq = center_x**2 + center_y**2 - c
+    if radius_sq <= 0:
+        return None
+
+    radius = np.sqrt(radius_sq)
+    radial_error = np.sqrt((x - center_x) ** 2 + (y - center_y) ** 2) - radius
+    return {
+        "center_x": center_x,
+        "center_y": center_y,
+        "radius": radius,
+        "mse": float(np.mean(radial_error**2)),
+    }
+
+
+def circle_x_intercepts(circle: dict[str, float]) -> tuple[float, float] | None:
+    center_x = circle["center_x"]
+    center_y = circle["center_y"]
+    radius = circle["radius"]
+    delta_sq = radius**2 - center_y**2
+    if delta_sq <= 0:
+        return None
+
+    delta = np.sqrt(delta_sq)
+    return center_x - delta, center_x + delta
+
+
+def fit_two_eis_arcs(arc: pd.DataFrame) -> dict[str, float] | None:
+    arc = arc.sort_values("r/oHM")
+    x = arc["r/oHM"].to_numpy(dtype=float)
+    y = arc["Z_img(Ohm)"].to_numpy(dtype=float)
+    n_points = len(arc)
+    min_points = max(8, int(n_points * 0.18))
+    best: dict[str, float] | None = None
+
+    for split_idx in range(min_points, n_points - min_points + 1):
+        x_first, y_first = x[:split_idx], y[:split_idx]
+        x_second, y_second = x[split_idx - 1 :], y[split_idx - 1 :]
+        first = fit_circle(x_first, y_first)
+        second = fit_circle(x_second, y_second)
+        if first is None or second is None:
+            continue
+
+        first_intercepts = circle_x_intercepts(first)
+        second_intercepts = circle_x_intercepts(second)
+        if first_intercepts is None or second_intercepts is None:
+            continue
+
+        first_left, first_right = first_intercepts
+        second_left, second_right = second_intercepts
+        if not (first_left < first_right <= second_right):
+            continue
+
+        total_mse = first["mse"] * len(x_first) + second["mse"] * len(x_second)
+        if best is None or total_mse < best["Fit MSE"]:
+            best = {
+                "R_ohmic (Ohm)": first_left,
+                "R_ct_anode (Ohm)": max(first_right - first_left, 0),
+                "R_ct_cathode (Ohm)": max(second_right - second_left, 0),
+                "R_ct_total (Ohm)": max(first_right - first_left, 0) + max(second_right - second_left, 0),
+                "Arc Split Real (Ohm)": x[split_idx - 1],
+                "Anode Circle Center Real (Ohm)": first["center_x"],
+                "Anode Circle Center Imag (Ohm)": first["center_y"],
+                "Anode Circle Radius (Ohm)": first["radius"],
+                "Cathode Circle Center Real (Ohm)": second["center_x"],
+                "Cathode Circle Center Imag (Ohm)": second["center_y"],
+                "Cathode Circle Radius (Ohm)": second["radius"],
+                "Fit MSE": total_mse,
+            }
+
+    return best
+
+
 def fit_eis_resistances(eis: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for (fc, current, hour), group in eis.groupby(["Fuel Cell", "Current (A)", "Test Hour"]):
@@ -308,37 +389,16 @@ def fit_eis_resistances(eis: pd.DataFrame) -> pd.DataFrame:
         if len(arc) < 5:
             continue
 
-        x = arc["r/oHM"].to_numpy(dtype=float)
-        y = arc["Z_img(Ohm)"].to_numpy(dtype=float)
-        matrix = np.column_stack([x, y, np.ones_like(x)])
-        target = -(x**2 + y**2)
-        a, b, c = np.linalg.lstsq(matrix, target, rcond=None)[0]
-        center_x = -a / 2
-        center_y = -b / 2
-        radius = np.sqrt(max(center_x**2 + center_y**2 - c, 0))
-        intercept_delta = np.sqrt(max(radius**2 - center_y**2, 0))
-
-        left_intercept = center_x - intercept_delta
-        right_intercept = center_x + intercept_delta
-        apex_x = x[np.argmax(y)]
-        apex_x = min(max(apex_x, left_intercept), right_intercept)
-
-        r_ohmic = left_intercept
-        r_ct_anode = max(apex_x - left_intercept, 0)
-        r_ct_cathode = max(right_intercept - apex_x, 0)
+        fit = fit_two_eis_arcs(arc)
+        if fit is None:
+            continue
 
         rows.append(
             {
                 "Fuel Cell": fc,
                 "Current (A)": current,
                 "Test Hour": hour,
-                "R_ohmic (Ohm)": r_ohmic,
-                "R_ct_anode (Ohm)": r_ct_anode,
-                "R_ct_cathode (Ohm)": r_ct_cathode,
-                "R_ct_total (Ohm)": r_ct_anode + r_ct_cathode,
-                "Circle Center Real (Ohm)": center_x,
-                "Circle Center Imag (Ohm)": center_y,
-                "Circle Radius (Ohm)": radius,
+                **fit,
             }
         )
 
@@ -555,7 +615,7 @@ def write_main_readme(
         "",
         "## EIS Resistance Analysis",
         "",
-        "EIS resistance values were estimated from the Nyquist-oriented impedance arc using a least-squares circle fit. `R_ohmic` is taken from the high-frequency real-axis intercept of the fitted circle. The total arc span is split at the measured apex to provide approximate anode-side and cathode-side charge-transfer resistance trends.",
+        "EIS resistance values were estimated by fitting two least-squares circles to the Nyquist-oriented impedance arc. The split point is selected by scanning candidate boundaries and choosing the two-circle fit with the lowest residual error. `R_ohmic` is taken from the high-frequency real-axis intercept of the first fitted circle. `R_ct_anode` and `R_ct_cathode` are estimated from the real-axis diameters of the first and second fitted circles, respectively.",
         "",
         "The full fitted resistance table is saved at `results/eis_resistance_summary.csv`.",
         "",

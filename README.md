@@ -143,7 +143,7 @@ FC2 shows a larger voltage loss and a faster degradation rate than FC1, consiste
 
 ## EIS Resistance Analysis
 
-EIS resistance values were estimated from the Nyquist-oriented impedance arc using a least-squares circle fit. `R_ohmic` is taken from the high-frequency real-axis intercept of the fitted circle. The total arc span is split at the measured apex to provide approximate anode-side and cathode-side charge-transfer resistance trends.
+EIS resistance values were estimated by fitting two least-squares circles to the Nyquist-oriented impedance arc. The split point is selected by scanning candidate boundaries and choosing the two-circle fit with the lowest residual error. `R_ohmic` is taken from the high-frequency real-axis intercept of the first fitted circle. `R_ct_anode` and `R_ct_cathode` are estimated from the real-axis diameters of the first and second fitted circles, respectively.
 
 The full fitted resistance table is saved at `results/eis_resistance_summary.csv`.
 
@@ -151,12 +151,12 @@ The full fitted resistance table is saved at `results/eis_resistance_summary.csv
 
 | Fuel Cell | Current (A) | R_ohmic (Ohm) | R_ct_anode (Ohm) | R_ct_cathode (Ohm) | R_ct_total (Ohm) |
 | --- | --- | --- | --- | --- | --- |
-| FC1 | 20 | 0.0048 | 0.008 | 0.0094 | 0.0174 |
-| FC1 | 45 | 0.0047 | 0.005 | 0.0069 | 0.0118 |
-| FC1 | 70 | 0.0047 | 0.0051 | 0.0075 | 0.0126 |
-| FC2 | 20 | 0.0046 | 0.0079 | 0.0106 | 0.0185 |
-| FC2 | 45 | 0.0045 | 0.0055 | 0.0072 | 0.0127 |
-| FC2 | 70 | 0.0045 | 0.0055 | 0.0079 | 0.0133 |
+| FC1 | 20 | 0.0051 | 0.0153 | 0.0053 | 0.0206 |
+| FC1 | 45 | 0.0049 | 0.0099 | 0.0036 | 0.0135 |
+| FC1 | 70 | 0.0049 | 0.01 | 0.0042 | 0.0142 |
+| FC2 | 20 | 0.0049 | 0.0161 | 0.0056 | 0.0217 |
+| FC2 | 45 | 0.0047 | 0.0106 | 0.0047 | 0.0152 |
+| FC2 | 70 | 0.0047 | 0.0108 | 0.0063 | 0.0171 |
 
 ### Resistance Trend Figures
 
