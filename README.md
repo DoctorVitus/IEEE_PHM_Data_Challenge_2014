@@ -49,10 +49,10 @@ Individual ageing-channel figures are saved under [`results/figures/ageing_chann
 
 ### Polarization Curve Evolution
 
-![Polarization curve evolution](results/figures/polarization_all_times.png)
+Individual polarization figures are saved under [`results/figures/polarization/`](results/figures/polarization/).
 
 ### EIS Nyquist Response
 
-![EIS Nyquist response](results/figures/eis_nyquist_all_currents.png)
+Individual EIS figures are saved under [`results/figures/eis/`](results/figures/eis/). The EIS plots use the raw impedance data with the imaginary component sign-flipped for Nyquist-style display.
 
 More result details are summarized in [`results/README.md`](results/README.md).

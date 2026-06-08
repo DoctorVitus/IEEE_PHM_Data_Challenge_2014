@@ -13,8 +13,8 @@ This folder contains generated outputs from `code/analyze_fuel_cell.py`.
 
 - `figures/ageing_voltage_degradation.png`: stack voltage and cell imbalance during ageing
 - `figures/ageing_channels/`: individual ageing plots for every numeric channel
-- `figures/polarization_all_times.png`: polarization curves at every available ageing time
-- `figures/eis_nyquist_all_currents.png`: EIS Nyquist curves for every available current and ageing time
+- `figures/polarization/`: individual polarization plots
+- `figures/eis/`: individual EIS Nyquist plots using raw data with sign-flipped imaginary impedance
 
 ## Ageing Parameter Notes
 
@@ -71,3 +71,17 @@ This folder contains generated outputs from `code/analyze_fuel_cell.py`.
 - `figures/ageing_channels/doutair_l_mn.png`: DoutAIR (l/mn)
 - `figures/ageing_channels/dwat_l_mn.png`: DWAT (l/mn)
 - `figures/ageing_channels/hrairfc.png`: HrAIRFC (%)
+
+## Individual Polarization Figures
+
+- `figures/polarization/fc1_polarization_curves.png`: FC1 polarization curves
+- `figures/polarization/fc2_polarization_curves.png`: FC2 polarization curves
+
+## Individual EIS Figures
+
+- `figures/eis/fc1_eis_20a.png`: FC1 EIS Nyquist at 20 A
+- `figures/eis/fc1_eis_45a.png`: FC1 EIS Nyquist at 45 A
+- `figures/eis/fc1_eis_70a.png`: FC1 EIS Nyquist at 70 A
+- `figures/eis/fc2_eis_20a.png`: FC2 EIS Nyquist at 20 A
+- `figures/eis/fc2_eis_45a.png`: FC2 EIS Nyquist at 45 A
+- `figures/eis/fc2_eis_70a.png`: FC2 EIS Nyquist at 70 A

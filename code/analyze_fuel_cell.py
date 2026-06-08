@@ -220,11 +220,14 @@ def plot_ageing_channel_figures(ageing: pd.DataFrame) -> list[tuple[str, str]]:
     return outputs
 
 
-def plot_polarization(polarization: pd.DataFrame) -> None:
-    fig, axes = plt.subplots(1, 2, figsize=(13.5, 5.5), sharey=True)
+def plot_polarization(polarization: pd.DataFrame) -> list[tuple[str, str]]:
+    output_dir = FIGURE_DIR / "polarization"
+    output_dir.mkdir(parents=True, exist_ok=True)
     j_col = find_column(polarization, "J (A/cm")
+    outputs: list[tuple[str, str]] = []
 
-    for ax, (fc, group) in zip(axes, polarization.groupby("Fuel Cell")):
+    for fc, group in polarization.groupby("Fuel Cell"):
+        fig, ax = plt.subplots(figsize=(8.5, 5.6))
         hours = sorted(group["Test Hour"].unique())
         cmap = plt.get_cmap("viridis")
         colors = cmap(np.linspace(0.05, 0.95, len(hours)))
@@ -244,46 +247,46 @@ def plot_polarization(polarization: pd.DataFrame) -> None:
 
         ax.set_title(f"{fc} Polarization Curves")
         ax.set_xlabel("Current density (A/cm2)")
+        ax.set_ylabel("Stack voltage (V)")
         ax.grid(alpha=0.25)
         ax.legend(title="Ageing time", frameon=False, ncol=2, fontsize=8)
 
-    axes[0].set_ylabel("Stack voltage (V)")
-    save_figure(fig, "polarization_all_times.png")
+        filename = f"{fc.lower()}_polarization_curves.png"
+        fig.tight_layout()
+        fig.savefig(output_dir / filename, dpi=220)
+        plt.close(fig)
+        outputs.append((f"{fc} polarization curves", f"figures/polarization/{filename}"))
+
+    return outputs
 
 
-def capacitive_eis_arc(curve: pd.DataFrame) -> pd.DataFrame:
-    positive = curve[curve["i/oHM"] > 0].copy()
-    negative = curve[curve["i/oHM"] < 0].copy()
-
-    if len(positive) >= len(negative):
-        arc = positive
-        arc["-Z imag (Ohm)"] = arc["i/oHM"]
-    else:
-        arc = negative
-        arc["-Z imag (Ohm)"] = -arc["i/oHM"]
-
-    return arc.sort_values("r/oHM")
+def raw_eis_with_flipped_sign(curve: pd.DataFrame) -> pd.DataFrame:
+    raw = curve.copy()
+    sign = 1 if raw["i/oHM"].median() >= 0 else -1
+    raw["Z imag, sign-corrected (Ohm)"] = sign * raw["i/oHM"]
+    return raw.sort_values("fREQUENCY/hZ", ascending=False)
 
 
-def plot_eis(eis: pd.DataFrame) -> None:
+def plot_eis(eis: pd.DataFrame) -> list[tuple[str, str]]:
+    output_dir = FIGURE_DIR / "eis"
+    output_dir.mkdir(parents=True, exist_ok=True)
     fcs = ["FC1", "FC2"]
     currents = sorted(eis["Current (A)"].unique())
-    fig, axes = plt.subplots(len(fcs), len(currents), figsize=(5.2 * len(currents), 4.6 * len(fcs)), sharex=False)
+    outputs: list[tuple[str, str]] = []
 
-    for row, fc in enumerate(fcs):
-        for col, current in enumerate(currents):
-            ax = axes[row, col]
+    for fc in fcs:
+        for current in currents:
+            fig, ax = plt.subplots(figsize=(8.5, 5.6))
             group = eis[(eis["Fuel Cell"] == fc) & (eis["Current (A)"] == current)]
             hours = sorted(group["Test Hour"].unique())
             cmap = plt.get_cmap("plasma")
             colors = cmap(np.linspace(0.05, 0.95, len(hours)))
 
             for hour, color in zip(hours, colors):
-                curve = group[group["Test Hour"] == hour]
-                arc = capacitive_eis_arc(curve)
+                curve = raw_eis_with_flipped_sign(group[group["Test Hour"] == hour])
                 ax.plot(
-                    arc["r/oHM"],
-                    arc["-Z imag (Ohm)"],
+                    curve["r/oHM"],
+                    curve["Z imag, sign-corrected (Ohm)"],
                     color=color,
                     linewidth=1.1,
                     alpha=0.9,
@@ -292,12 +295,17 @@ def plot_eis(eis: pd.DataFrame) -> None:
 
             ax.set_title(f"{fc} EIS Nyquist at {current} A")
             ax.set_xlabel("Z real (Ohm)")
-            ax.set_ylabel("-Z imag (Ohm)")
+            ax.set_ylabel("Z imag, sign-corrected (Ohm)")
             ax.grid(alpha=0.25)
             ax.legend(title="Ageing time", frameon=False, fontsize=7, ncol=2)
 
-    fig.suptitle("EIS Nyquist Response", y=0.995)
-    save_figure(fig, "eis_nyquist_all_currents.png", rect=(0, 0, 1, 0.975))
+            filename = f"{fc.lower()}_eis_{current}a.png"
+            fig.tight_layout()
+            fig.savefig(output_dir / filename, dpi=220)
+            plt.close(fig)
+            outputs.append((f"{fc} EIS Nyquist at {current} A", f"figures/eis/{filename}"))
+
+    return outputs
 
 
 PARAMETER_DESCRIPTIONS = {
@@ -328,7 +336,12 @@ PARAMETER_DESCRIPTIONS = {
 }
 
 
-def write_results_readme(summary: pd.DataFrame, ageing_figures: list[tuple[str, str]]) -> None:
+def write_results_readme(
+    summary: pd.DataFrame,
+    ageing_figures: list[tuple[str, str]],
+    polarization_figures: list[tuple[str, str]],
+    eis_figures: list[tuple[str, str]],
+) -> None:
     rounded = summary.round(4)
     header = "| " + " | ".join(rounded.columns) + " |"
     divider = "| " + " | ".join(["---"] * len(rounded.columns)) + " |"
@@ -351,8 +364,8 @@ def write_results_readme(summary: pd.DataFrame, ageing_figures: list[tuple[str, 
         "",
         "- `figures/ageing_voltage_degradation.png`: stack voltage and cell imbalance during ageing",
         "- `figures/ageing_channels/`: individual ageing plots for every numeric channel",
-        "- `figures/polarization_all_times.png`: polarization curves at every available ageing time",
-        "- `figures/eis_nyquist_all_currents.png`: EIS Nyquist curves for every available current and ageing time",
+        "- `figures/polarization/`: individual polarization plots",
+        "- `figures/eis/`: individual EIS Nyquist plots using raw data with sign-flipped imaginary impedance",
         "",
         "## Ageing Parameter Notes",
         "",
@@ -366,6 +379,14 @@ def write_results_readme(summary: pd.DataFrame, ageing_figures: list[tuple[str, 
         "## Individual Ageing Figures",
         "",
         *[f"- `{path}`: {parameter}" for parameter, path in ageing_figures],
+        "",
+        "## Individual Polarization Figures",
+        "",
+        *[f"- `{path}`: {label}" for label, path in polarization_figures],
+        "",
+        "## Individual EIS Figures",
+        "",
+        *[f"- `{path}`: {label}" for label, path in eis_figures],
         "",
     ]
     (RESULTS_DIR / "README.md").write_text("\n".join(lines), encoding="utf-8")
@@ -384,9 +405,9 @@ def main() -> None:
 
     plot_ageing_voltage(ageing)
     ageing_figures = plot_ageing_channel_figures(ageing)
-    plot_polarization(polarization)
-    plot_eis(eis)
-    write_results_readme(summary, ageing_figures)
+    polarization_figures = plot_polarization(polarization)
+    eis_figures = plot_eis(eis)
+    write_results_readme(summary, ageing_figures, polarization_figures, eis_figures)
 
     print("Analysis complete")
     print(summary.to_string(index=False))
