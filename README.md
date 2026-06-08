@@ -1,6 +1,14 @@
 # IEEE PHM Data Challenge 2014
 
-This repository contains the IEEE PHM Data Challenge 2014 fuel-cell durability dataset and a reproducible analysis workflow for quick exploration.
+This repository contains the IEEE PHM Data Challenge 2014 fuel-cell durability dataset and a reproducible analysis workflow for quick exploration and visualization.
+
+## Repository Structure
+
+```text
+data/     Original dataset files. Do not modify these files.
+code/     Reproducible Python analysis scripts.
+results/  Generated summaries, figures, and result notes.
+```
 
 ## Dataset
 
@@ -15,10 +23,10 @@ The dataset includes ageing, polarization, and electrochemical impedance spectro
 Run the analysis script from the repository root:
 
 ```bash
-python scripts/analyze_fuel_cell.py
+python code/analyze_fuel_cell.py
 ```
 
-The script reads the Excel/CSV files under `data/` and writes figures plus a summary table to `analysis_outputs/`.
+The script reads the Excel/CSV files under `data/` and writes figures plus summary tables to `results/`.
 
 ## Key Results
 
@@ -33,12 +41,18 @@ FC2 shows a larger voltage loss and a faster degradation rate than FC1, consiste
 
 ### Ageing Voltage Degradation
 
-![Ageing voltage degradation](analysis_outputs/figures/ageing_voltage_degradation.png)
+![Ageing voltage degradation](results/figures/ageing_voltage_degradation.png)
+
+### Ageing Data Overview
+
+![Ageing data overview](results/figures/ageing_all_channels.png)
 
 ### Polarization Curve Evolution
 
-![Polarization curve evolution](analysis_outputs/figures/polarization_evolution.png)
+![Polarization curve evolution](results/figures/polarization_all_times.png)
 
-### EIS Nyquist Response at 70 A
+### EIS Nyquist Response
 
-![EIS Nyquist response](analysis_outputs/figures/eis_nyquist_70A.png)
+![EIS Nyquist response](results/figures/eis_nyquist_all_currents.png)
+
+More result details are summarized in [`results/README.md`](results/README.md).
