@@ -43,9 +43,9 @@ FC2 shows a larger voltage loss and a faster degradation rate than FC1, consiste
 
 ![Ageing voltage degradation](results/figures/ageing_voltage_degradation.png)
 
-### Ageing Data Overview
+### Individual Ageing Channels
 
-![Ageing data overview](results/figures/ageing_all_channels.png)
+Individual ageing-channel figures are saved under [`results/figures/ageing_channels/`](results/figures/ageing_channels/). Parameter meanings are summarized in [`results/README.md`](results/README.md).
 
 ### Polarization Curve Evolution
 

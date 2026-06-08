@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import re
 from pathlib import Path
 
@@ -61,6 +60,12 @@ def display_label(label: str) -> str:
         .replace("節캜", "deg C")
         .replace("節?", "2")
     )
+
+
+def safe_filename(label: str) -> str:
+    name = display_label(label)
+    name = re.sub(r"[^A-Za-z0-9]+", "_", name).strip("_")
+    return name.lower()
 
 
 def fuel_cell_from_name(path: Path) -> str:
@@ -182,33 +187,37 @@ def plot_ageing_voltage(ageing: pd.DataFrame) -> None:
     save_figure(fig, "ageing_voltage_degradation.png")
 
 
-def plot_ageing_all_channels(ageing: pd.DataFrame) -> None:
+def plot_ageing_channel_figures(ageing: pd.DataFrame) -> list[tuple[str, str]]:
     numeric_cols = [
         col
         for col in ageing.select_dtypes(include=[np.number]).columns
         if col != "Time (h)"
     ]
-    ncols = 4
-    nrows = math.ceil(len(numeric_cols) / ncols)
-    fig, axes = plt.subplots(nrows, ncols, figsize=(18, 3.0 * nrows), sharex=False)
-    axes = np.ravel(axes)
+    channel_dir = FIGURE_DIR / "ageing_channels"
+    channel_dir.mkdir(parents=True, exist_ok=True)
     colors = {"FC1": "#2563eb", "FC2": "#dc2626"}
+    outputs: list[tuple[str, str]] = []
 
-    for ax, col in zip(axes, numeric_cols):
+    for col in numeric_cols:
+        fig, ax = plt.subplots(figsize=(8.5, 5.2))
         for fc, group in ageing.groupby("Fuel Cell"):
             group = group.sort_values("Time (h)")
             values = group[col].rolling(600, min_periods=1).mean()
-            ax.plot(group["Time (h)"], values, color=colors.get(fc), linewidth=1.0, label=fc)
+            ax.plot(group["Time (h)"], values, color=colors.get(fc), linewidth=1.4, label=fc)
+
         ax.set_title(display_label(col))
         ax.set_xlabel("Time (h)")
-        ax.grid(alpha=0.2)
+        ax.set_ylabel(display_label(col))
+        ax.grid(alpha=0.25)
+        ax.legend(frameon=False)
 
-    for ax in axes[len(numeric_cols) :]:
-        ax.axis("off")
+        filename = f"{safe_filename(col)}.png"
+        fig.tight_layout()
+        fig.savefig(channel_dir / filename, dpi=220)
+        plt.close(fig)
+        outputs.append((display_label(col), f"figures/ageing_channels/{filename}"))
 
-    axes[0].legend(loc="best", frameon=False)
-    fig.suptitle("Ageing Data Overview: All Numeric Channels", y=0.998)
-    save_figure(fig, "ageing_all_channels.png", rect=(0, 0, 1, 0.985))
+    return outputs
 
 
 def plot_polarization(polarization: pd.DataFrame) -> None:
@@ -218,31 +227,42 @@ def plot_polarization(polarization: pd.DataFrame) -> None:
     for ax, (fc, group) in zip(axes, polarization.groupby("Fuel Cell")):
         hours = sorted(group["Test Hour"].unique())
         cmap = plt.get_cmap("viridis")
-        norm = plt.Normalize(min(hours), max(hours))
+        colors = cmap(np.linspace(0.05, 0.95, len(hours)))
 
-        for hour in hours:
+        for hour, color in zip(hours, colors):
             curve = group[group["Test Hour"] == hour].copy()
             curve["J bin"] = curve[j_col].round(2)
             summary = curve.groupby("J bin", as_index=False)["Ustack (V)"].mean()
             ax.plot(
                 summary["J bin"],
                 summary["Ustack (V)"],
-                color=cmap(norm(hour)),
+                color=color,
                 linewidth=1.2,
                 alpha=0.9,
+                label=f"{hour} h",
             )
 
-        ax.set_title(f"{fc} Polarization Curves: All Ageing Times")
+        ax.set_title(f"{fc} Polarization Curves")
         ax.set_xlabel("Current density (A/cm2)")
         ax.grid(alpha=0.25)
-
-        scalar_map = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-        scalar_map.set_array([])
-        cbar = fig.colorbar(scalar_map, ax=ax, fraction=0.046, pad=0.04)
-        cbar.set_label("Ageing time (h)")
+        ax.legend(title="Ageing time", frameon=False, ncol=2, fontsize=8)
 
     axes[0].set_ylabel("Stack voltage (V)")
     save_figure(fig, "polarization_all_times.png")
+
+
+def capacitive_eis_arc(curve: pd.DataFrame) -> pd.DataFrame:
+    positive = curve[curve["i/oHM"] > 0].copy()
+    negative = curve[curve["i/oHM"] < 0].copy()
+
+    if len(positive) >= len(negative):
+        arc = positive
+        arc["-Z imag (Ohm)"] = arc["i/oHM"]
+    else:
+        arc = negative
+        arc["-Z imag (Ohm)"] = -arc["i/oHM"]
+
+    return arc.sort_values("r/oHM")
 
 
 def plot_eis(eis: pd.DataFrame) -> None:
@@ -256,33 +276,59 @@ def plot_eis(eis: pd.DataFrame) -> None:
             group = eis[(eis["Fuel Cell"] == fc) & (eis["Current (A)"] == current)]
             hours = sorted(group["Test Hour"].unique())
             cmap = plt.get_cmap("plasma")
-            norm = plt.Normalize(min(hours), max(hours))
+            colors = cmap(np.linspace(0.05, 0.95, len(hours)))
 
-            for hour in hours:
-                curve = group[group["Test Hour"] == hour].sort_values("fREQUENCY/hZ")
+            for hour, color in zip(hours, colors):
+                curve = group[group["Test Hour"] == hour]
+                arc = capacitive_eis_arc(curve)
                 ax.plot(
-                    curve["r/oHM"],
-                    curve["i/oHM"].abs(),
-                    color=cmap(norm(hour)),
+                    arc["r/oHM"],
+                    arc["-Z imag (Ohm)"],
+                    color=color,
                     linewidth=1.1,
                     alpha=0.9,
+                    label=f"{hour} h",
                 )
 
             ax.set_title(f"{fc} EIS Nyquist at {current} A")
             ax.set_xlabel("Z real (Ohm)")
             ax.set_ylabel("-Z imag (Ohm)")
             ax.grid(alpha=0.25)
+            ax.legend(title="Ageing time", frameon=False, fontsize=7, ncol=2)
 
-            scalar_map = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-            scalar_map.set_array([])
-            cbar = fig.colorbar(scalar_map, ax=ax, fraction=0.046, pad=0.04)
-            cbar.set_label("Ageing time (h)")
-
-    fig.suptitle("EIS Nyquist Response: All Currents and Ageing Times", y=0.995)
+    fig.suptitle("EIS Nyquist Response", y=0.995)
     save_figure(fig, "eis_nyquist_all_currents.png", rect=(0, 0, 1, 0.975))
 
 
-def write_results_readme(summary: pd.DataFrame) -> None:
+PARAMETER_DESCRIPTIONS = {
+    "U1 (V)": "Voltage of cell 1.",
+    "U2 (V)": "Voltage of cell 2.",
+    "U3 (V)": "Voltage of cell 3.",
+    "U4 (V)": "Voltage of cell 4.",
+    "U5 (V)": "Voltage of cell 5.",
+    "Utot (V)": "Total stack voltage.",
+    "J (A/cm2)": "Current density normalized by active area.",
+    "I (A)": "Stack current.",
+    "TinH2 (deg C)": "Hydrogen inlet temperature.",
+    "ToutH2 (deg C)": "Hydrogen outlet temperature.",
+    "TinAIR (deg C)": "Air inlet temperature.",
+    "ToutAIR (deg C)": "Air outlet temperature.",
+    "TinWAT (deg C)": "Cooling-water inlet temperature.",
+    "ToutWAT (deg C)": "Cooling-water outlet temperature.",
+    "PinAIR (mbara)": "Air inlet absolute pressure.",
+    "PoutAIR (mbara)": "Air outlet absolute pressure.",
+    "PoutH2 (mbara)": "Hydrogen outlet absolute pressure.",
+    "PinH2 (mbara)": "Hydrogen inlet absolute pressure.",
+    "DinH2 (l/mn)": "Hydrogen inlet flow rate.",
+    "DoutH2 (l/mn)": "Hydrogen outlet flow rate.",
+    "DinAIR (l/mn)": "Air inlet flow rate.",
+    "DoutAIR (l/mn)": "Air outlet flow rate.",
+    "DWAT (l/mn)": "Cooling-water flow rate.",
+    "HrAIRFC (%)": "Relative humidity of the air feed.",
+}
+
+
+def write_results_readme(summary: pd.DataFrame, ageing_figures: list[tuple[str, str]]) -> None:
     rounded = summary.round(4)
     header = "| " + " | ".join(rounded.columns) + " |"
     divider = "| " + " | ".join(["---"] * len(rounded.columns)) + " |"
@@ -304,9 +350,22 @@ def write_results_readme(summary: pd.DataFrame) -> None:
         "## Figures",
         "",
         "- `figures/ageing_voltage_degradation.png`: stack voltage and cell imbalance during ageing",
-        "- `figures/ageing_all_channels.png`: overview of every numeric ageing channel",
+        "- `figures/ageing_channels/`: individual ageing plots for every numeric channel",
         "- `figures/polarization_all_times.png`: polarization curves at every available ageing time",
         "- `figures/eis_nyquist_all_currents.png`: EIS Nyquist curves for every available current and ageing time",
+        "",
+        "## Ageing Parameter Notes",
+        "",
+        "| Parameter | Meaning |",
+        "| --- | --- |",
+        *[
+            f"| {parameter} | {PARAMETER_DESCRIPTIONS.get(parameter, 'Recorded operating variable.')} |"
+            for parameter, _path in ageing_figures
+        ],
+        "",
+        "## Individual Ageing Figures",
+        "",
+        *[f"- `{path}`: {parameter}" for parameter, path in ageing_figures],
         "",
     ]
     (RESULTS_DIR / "README.md").write_text("\n".join(lines), encoding="utf-8")
@@ -324,10 +383,10 @@ def main() -> None:
     summary.to_csv(RESULTS_DIR / "ageing_summary.csv", index=False)
 
     plot_ageing_voltage(ageing)
-    plot_ageing_all_channels(ageing)
+    ageing_figures = plot_ageing_channel_figures(ageing)
     plot_polarization(polarization)
     plot_eis(eis)
-    write_results_readme(summary)
+    write_results_readme(summary, ageing_figures)
 
     print("Analysis complete")
     print(summary.to_string(index=False))
