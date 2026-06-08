@@ -49,7 +49,7 @@ FC2 shows a larger voltage loss and a faster degradation rate than FC1, consiste
 - `figures/ageing_voltage_degradation.png`: stack voltage and cell imbalance during ageing
 - `figures/ageing_channels/`: individual ageing plots for every numeric channel
 - `figures/polarization/`: individual polarization plots using scatter points with dashed guide lines
-- `figures/eis/`: individual EIS Nyquist plots using raw data with sign-corrected imaginary impedance
+- `figures/eis/`: individual EIS Nyquist plots using raw impedance data
 
 ### Ageing Voltage Degradation
 

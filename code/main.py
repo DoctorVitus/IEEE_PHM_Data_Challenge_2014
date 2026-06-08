@@ -178,7 +178,7 @@ def plot_ageing_voltage(ageing: pd.DataFrame) -> None:
         imbalance = group[cell_cols].std(axis=1).rolling(600, min_periods=1).mean()
         scatter_with_guide(axes[1], group["Time (h)"], imbalance * 1000, colors.get(fc), fc, size=2.5)
 
-    axes[0].set_title("Stack Voltage Degradation During Ageing")
+    axes[0].set_title("Stack Voltage Degradation")
     axes[0].set_ylabel("Utot (V), rolling mean")
     axes[0].grid(alpha=0.25)
     axes[0].legend()
@@ -268,7 +268,7 @@ def plot_polarization(polarization: pd.DataFrame) -> list[tuple[str, str]]:
 def raw_eis_with_flipped_sign(curve: pd.DataFrame) -> pd.DataFrame:
     raw = curve.copy()
     sign = 1 if raw["i/oHM"].median() >= 0 else -1
-    raw["Z imag, sign-corrected (Ohm)"] = sign * raw["i/oHM"]
+    raw["Z_img(Ohm)"] = sign * raw["i/oHM"]
     return raw.sort_values("fREQUENCY/hZ", ascending=False)
 
 
@@ -292,15 +292,15 @@ def plot_eis(eis: pd.DataFrame) -> list[tuple[str, str]]:
                 scatter_with_guide(
                     ax,
                     curve["r/oHM"],
-                    curve["Z imag, sign-corrected (Ohm)"],
+                    curve["Z_img(Ohm)"],
                     color,
                     f"{hour} h",
                     size=10,
                 )
 
             ax.set_title(f"{fc} EIS Nyquist at {current} A")
-            ax.set_xlabel("Z real (Ohm)")
-            ax.set_ylabel("Z imag, sign-corrected (Ohm)")
+            ax.set_xlabel("Z_real(Ohm)")
+            ax.set_ylabel("Z_img(Ohm)")
             ax.grid(alpha=0.25)
             ax.legend(title="Ageing time", frameon=False, fontsize=7, ncol=2)
 
@@ -409,7 +409,7 @@ def write_main_readme(
         "- `figures/ageing_voltage_degradation.png`: stack voltage and cell imbalance during ageing",
         "- `figures/ageing_channels/`: individual ageing plots for every numeric channel",
         "- `figures/polarization/`: individual polarization plots using scatter points with dashed guide lines",
-        "- `figures/eis/`: individual EIS Nyquist plots using raw data with sign-corrected imaginary impedance",
+        "- `figures/eis/`: individual EIS Nyquist plots using raw impedance data",
         "",
         "### Ageing Voltage Degradation",
         "",
