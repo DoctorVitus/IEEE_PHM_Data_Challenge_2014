@@ -140,3 +140,41 @@ FC2 shows a larger voltage loss and a faster degradation rate than FC1, consiste
 ### FC2 EIS Nyquist at 70 A
 
 ![FC2 EIS Nyquist at 70 A](results/figures/eis/fc2_eis_70a.png)
+
+## EIS Resistance Analysis
+
+EIS resistance values were estimated from the Nyquist-oriented impedance arc using a least-squares circle fit. `R_ohmic` is taken from the high-frequency real-axis intercept of the fitted circle. The total arc span is split at the measured apex to provide approximate anode-side and cathode-side charge-transfer resistance trends.
+
+The full fitted resistance table is saved at `results/eis_resistance_summary.csv`.
+
+### Mean Fitted Resistance by Fuel Cell and EIS Current
+
+| Fuel Cell | Current (A) | R_ohmic (Ohm) | R_ct_anode (Ohm) | R_ct_cathode (Ohm) | R_ct_total (Ohm) |
+| --- | --- | --- | --- | --- | --- |
+| FC1 | 20 | 0.0048 | 0.008 | 0.0094 | 0.0174 |
+| FC1 | 45 | 0.0047 | 0.005 | 0.0069 | 0.0118 |
+| FC1 | 70 | 0.0047 | 0.0051 | 0.0075 | 0.0126 |
+| FC2 | 20 | 0.0046 | 0.0079 | 0.0106 | 0.0185 |
+| FC2 | 45 | 0.0045 | 0.0055 | 0.0072 | 0.0127 |
+| FC2 | 70 | 0.0045 | 0.0055 | 0.0079 | 0.0133 |
+
+### Resistance Trend Figures
+
+#### FC1 Ohmic Resistance
+
+![FC1 Ohmic Resistance](results/figures/eis_resistance_trends/fc1_ohmic_resistance.png)
+#### FC1 Anode Charge Transfer Resistance
+
+![FC1 Anode Charge Transfer Resistance](results/figures/eis_resistance_trends/fc1_anode_charge_transfer_resistance.png)
+#### FC1 Cathode Charge Transfer Resistance
+
+![FC1 Cathode Charge Transfer Resistance](results/figures/eis_resistance_trends/fc1_cathode_charge_transfer_resistance.png)
+#### FC2 Ohmic Resistance
+
+![FC2 Ohmic Resistance](results/figures/eis_resistance_trends/fc2_ohmic_resistance.png)
+#### FC2 Anode Charge Transfer Resistance
+
+![FC2 Anode Charge Transfer Resistance](results/figures/eis_resistance_trends/fc2_anode_charge_transfer_resistance.png)
+#### FC2 Cathode Charge Transfer Resistance
+
+![FC2 Cathode Charge Transfer Resistance](results/figures/eis_resistance_trends/fc2_cathode_charge_transfer_resistance.png)
