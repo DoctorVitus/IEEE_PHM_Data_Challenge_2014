@@ -441,6 +441,171 @@ def plot_eis_resistance_trends(resistances: pd.DataFrame) -> list[tuple[str, str
     return outputs
 
 
+def circle_arc_points(circle: dict[str, float], n_points: int = 240) -> tuple[np.ndarray, np.ndarray] | None:
+    intercepts = circle_x_intercepts(circle)
+    if intercepts is None:
+        return None
+
+    left, right = intercepts
+    center_x = circle["center_x"]
+    center_y = circle["center_y"]
+    radius = circle["radius"]
+    theta_left = np.arctan2(-center_y, left - center_x)
+    theta_right = np.arctan2(-center_y, right - center_x)
+    if theta_left < theta_right:
+        theta_left += 2 * np.pi
+
+    theta = np.linspace(theta_right, theta_left, n_points)
+    x = center_x + radius * np.cos(theta)
+    y = center_y + radius * np.sin(theta)
+    return x, y
+
+
+def add_resistance_arrow(
+    ax: plt.Axes,
+    x_start: float,
+    x_end: float,
+    y: float,
+    label: str,
+    color: str,
+) -> None:
+    ax.annotate(
+        "",
+        xy=(x_end, y),
+        xytext=(x_start, y),
+        arrowprops={"arrowstyle": "<->", "color": color, "lw": 1.4, "shrinkA": 0, "shrinkB": 0},
+    )
+    ax.text(
+        (x_start + x_end) / 2,
+        y,
+        label,
+        ha="center",
+        va="top",
+        color=color,
+        fontsize=8,
+        bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.75, "pad": 1.5},
+    )
+
+
+def plot_eis_fit_diagnostics(eis: pd.DataFrame, resistances: pd.DataFrame) -> list[tuple[str, str]]:
+    output_dir = FIGURE_DIR / "eis_fit_diagnostics"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    outputs: list[tuple[str, str]] = []
+
+    for (fc, current), group in resistances.groupby(["Fuel Cell", "Current (A)"]):
+        row = group.sort_values("Test Hour").iloc[-1]
+        hour = row["Test Hour"]
+        curve = raw_eis_with_flipped_sign(
+            eis[
+                (eis["Fuel Cell"] == fc)
+                & (eis["Current (A)"] == current)
+                & (eis["Test Hour"] == hour)
+            ]
+        )
+        arc = curve[curve["Z_img(Ohm)"] >= 0].dropna(subset=["r/oHM", "Z_img(Ohm)"]).sort_values("r/oHM")
+        split_real = row["Arc Split Real (Ohm)"]
+
+        anode_circle = {
+            "center_x": row["Anode Circle Center Real (Ohm)"],
+            "center_y": row["Anode Circle Center Imag (Ohm)"],
+            "radius": row["Anode Circle Radius (Ohm)"],
+        }
+        cathode_circle = {
+            "center_x": row["Cathode Circle Center Real (Ohm)"],
+            "center_y": row["Cathode Circle Center Imag (Ohm)"],
+            "radius": row["Cathode Circle Radius (Ohm)"],
+        }
+        anode_intercepts = circle_x_intercepts(anode_circle)
+        cathode_intercepts = circle_x_intercepts(cathode_circle)
+        anode_arc = circle_arc_points(anode_circle)
+        cathode_arc = circle_arc_points(cathode_circle)
+        if anode_intercepts is None or cathode_intercepts is None or anode_arc is None or cathode_arc is None:
+            continue
+
+        anode_left, anode_right = anode_intercepts
+        cathode_left, cathode_right = cathode_intercepts
+
+        fig, ax = plt.subplots(figsize=(8.8, 5.8))
+        ax.scatter(curve["r/oHM"], curve["Z_img(Ohm)"], s=16, color="#8c8c8c", alpha=0.5, label="Raw EIS")
+        ax.scatter(
+            arc.loc[arc["r/oHM"] <= split_real, "r/oHM"],
+            arc.loc[arc["r/oHM"] <= split_real, "Z_img(Ohm)"],
+            s=22,
+            color="#1f77b4",
+            alpha=0.85,
+            label="Anode-side arc points",
+        )
+        ax.scatter(
+            arc.loc[arc["r/oHM"] >= split_real, "r/oHM"],
+            arc.loc[arc["r/oHM"] >= split_real, "Z_img(Ohm)"],
+            s=22,
+            color="#d62728",
+            alpha=0.85,
+            label="Cathode-side arc points",
+        )
+        ax.plot(*anode_arc, color="#1f77b4", linewidth=2.2, label="Anode fitted circle")
+        ax.plot(*cathode_arc, color="#d62728", linewidth=2.2, label="Cathode fitted circle")
+
+        ax.axhline(0, color="#2f2f2f", linewidth=1)
+        ax.axvline(split_real, color="#6f42c1", linestyle=(0, (3, 3)), linewidth=1.5, label="Selected split")
+        ax.scatter(
+            [anode_left, anode_right, cathode_left, cathode_right],
+            [0, 0, 0, 0],
+            marker="x",
+            s=55,
+            color="#111111",
+            linewidths=1.6,
+            label="Real-axis intercepts",
+        )
+
+        ymax = max(float(arc["Z_img(Ohm)"].max()), float(max(anode_arc[1].max(), cathode_arc[1].max())))
+        arrow_gap = ymax * 0.11 if ymax > 0 else 0.001
+        base_y = -arrow_gap
+        add_resistance_arrow(
+            ax,
+            0,
+            row["R_ohmic (Ohm)"],
+            base_y,
+            f"$R_{{ohmic}}$ = {row['R_ohmic (Ohm)']:.4f} Ohm",
+            "#111111",
+        )
+        add_resistance_arrow(
+            ax,
+            anode_left,
+            anode_right,
+            base_y - arrow_gap,
+            f"$R_{{ct,anode}}$ = {row['R_ct_anode (Ohm)']:.4f} Ohm",
+            "#1f77b4",
+        )
+        add_resistance_arrow(
+            ax,
+            cathode_left,
+            cathode_right,
+            base_y - 2 * arrow_gap,
+            f"$R_{{ct,cathode}}$ = {row['R_ct_cathode (Ohm)']:.4f} Ohm",
+            "#d62728",
+        )
+
+        ax.set_title(f"{fc} EIS Two-Circle Fit at {int(current)} A, {int(hour)} h")
+        ax.set_xlabel("Z_real(Ohm)")
+        ax.set_ylabel("Z_img(Ohm)")
+        ax.grid(alpha=0.25)
+        ax.legend(frameon=False, fontsize=8, ncol=2)
+
+        xmin = min(0, float(curve["r/oHM"].min()), anode_left) - 0.03 * (cathode_right - min(0, anode_left))
+        xmax = max(float(curve["r/oHM"].max()), cathode_right) + 0.05 * (cathode_right - min(0, anode_left))
+        ax.set_xlim(xmin, xmax)
+        ax.set_ylim(base_y - 2.9 * arrow_gap, ymax * 1.15)
+
+        filename = f"{fc.lower()}_{int(current)}a_eis_two_circle_fit.png"
+        fig.tight_layout()
+        fig.savefig(output_dir / filename, dpi=220)
+        plt.close(fig)
+        outputs.append((f"{fc} {int(current)} A EIS two-circle fit", f"figures/eis_fit_diagnostics/{filename}"))
+
+    return outputs
+
+
 def plot_eis(eis: pd.DataFrame) -> list[tuple[str, str]]:
     output_dir = FIGURE_DIR / "eis"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -656,6 +821,7 @@ def main() -> None:
     polarization_figures = plot_polarization(polarization)
     eis_figures = plot_eis(eis)
     resistance_figures = plot_eis_resistance_trends(resistance_summary)
+    plot_eis_fit_diagnostics(eis, resistance_summary)
     write_main_readme(summary, resistance_summary, ageing_figures, polarization_figures, eis_figures, resistance_figures)
 
     print("Analysis complete")
