@@ -160,6 +160,11 @@ def save_figure(fig: plt.Figure, name: str, rect: tuple[float, float, float, flo
     plt.close(fig)
 
 
+def scatter_with_guide(ax: plt.Axes, x: pd.Series, y: pd.Series, color, label: str, size: float = 9) -> None:
+    ax.scatter(x, y, color=color, s=size, alpha=0.7, edgecolors="none", label=label)
+    ax.plot(x, y, color=color, linestyle="--", linewidth=0.9, alpha=0.65)
+
+
 def plot_ageing_voltage(ageing: pd.DataFrame) -> None:
     fig, axes = plt.subplots(2, 1, figsize=(11, 8), sharex=False)
     colors = {"FC1": "#2563eb", "FC2": "#dc2626"}
@@ -167,11 +172,11 @@ def plot_ageing_voltage(ageing: pd.DataFrame) -> None:
     for fc, group in ageing.groupby("Fuel Cell"):
         group = group.sort_values("Time (h)")
         rolling = group["Utot (V)"].rolling(600, min_periods=1).mean()
-        axes[0].plot(group["Time (h)"], rolling, label=fc, color=colors.get(fc), linewidth=1.8)
+        scatter_with_guide(axes[0], group["Time (h)"], rolling, colors.get(fc), fc, size=2.5)
 
         cell_cols = [f"U{i} (V)" for i in range(1, 6)]
         imbalance = group[cell_cols].std(axis=1).rolling(600, min_periods=1).mean()
-        axes[1].plot(group["Time (h)"], imbalance * 1000, label=fc, color=colors.get(fc), linewidth=1.8)
+        scatter_with_guide(axes[1], group["Time (h)"], imbalance * 1000, colors.get(fc), fc, size=2.5)
 
     axes[0].set_title("Stack Voltage Degradation During Ageing")
     axes[0].set_ylabel("Utot (V), rolling mean")
@@ -203,7 +208,7 @@ def plot_ageing_channel_figures(ageing: pd.DataFrame) -> list[tuple[str, str]]:
         for fc, group in ageing.groupby("Fuel Cell"):
             group = group.sort_values("Time (h)")
             values = group[col].rolling(600, min_periods=1).mean()
-            ax.plot(group["Time (h)"], values, color=colors.get(fc), linewidth=1.4, label=fc)
+            scatter_with_guide(ax, group["Time (h)"], values, colors.get(fc), fc, size=2.5)
 
         ax.set_title(display_label(col))
         ax.set_xlabel("Time (h)")
@@ -236,13 +241,13 @@ def plot_polarization(polarization: pd.DataFrame) -> list[tuple[str, str]]:
             curve = group[group["Test Hour"] == hour].copy()
             curve["J bin"] = curve[j_col].round(2)
             summary = curve.groupby("J bin", as_index=False)["Ustack (V)"].mean()
-            ax.plot(
+            scatter_with_guide(
+                ax,
                 summary["J bin"],
                 summary["Ustack (V)"],
-                color=color,
-                linewidth=1.2,
-                alpha=0.9,
-                label=f"{hour} h",
+                color,
+                f"{hour} h",
+                size=10,
             )
 
         ax.set_title(f"{fc} Polarization Curves")
@@ -284,13 +289,13 @@ def plot_eis(eis: pd.DataFrame) -> list[tuple[str, str]]:
 
             for hour, color in zip(hours, colors):
                 curve = raw_eis_with_flipped_sign(group[group["Test Hour"] == hour])
-                ax.plot(
+                scatter_with_guide(
+                    ax,
                     curve["r/oHM"],
                     curve["Z imag, sign-corrected (Ohm)"],
-                    color=color,
-                    linewidth=1.1,
-                    alpha=0.9,
-                    label=f"{hour} h",
+                    color,
+                    f"{hour} h",
+                    size=10,
                 )
 
             ax.set_title(f"{fc} EIS Nyquist at {current} A")
@@ -336,36 +341,79 @@ PARAMETER_DESCRIPTIONS = {
 }
 
 
-def write_results_readme(
-    summary: pd.DataFrame,
-    ageing_figures: list[tuple[str, str]],
-    polarization_figures: list[tuple[str, str]],
-    eis_figures: list[tuple[str, str]],
-) -> None:
-    rounded = summary.round(4)
+def markdown_table(df: pd.DataFrame) -> list[str]:
+    rounded = df.round(4)
     header = "| " + " | ".join(rounded.columns) + " |"
     divider = "| " + " | ".join(["---"] * len(rounded.columns)) + " |"
     rows = [
         "| " + " | ".join(str(value) for value in row) + " |"
         for row in rounded.to_numpy()
     ]
+    return [header, divider, *rows]
+
+
+def write_main_readme(
+    summary: pd.DataFrame,
+    ageing_figures: list[tuple[str, str]],
+    polarization_figures: list[tuple[str, str]],
+    eis_figures: list[tuple[str, str]],
+) -> None:
     lines = [
-        "# Analysis Results",
+        "# IEEE PHM Data Challenge 2014",
         "",
-        "This folder contains generated outputs from `code/analyze_fuel_cell.py`.",
+        "This repository contains the IEEE PHM Data Challenge 2014 fuel-cell durability dataset and a reproducible analysis workflow for quick exploration and visualization.",
         "",
-        "## Summary",
+        "## Repository Structure",
         "",
-        header,
-        divider,
-        *rows,
+        "```text",
+        "data/     Original dataset files. Do not modify these files.",
+        "code/     Reproducible Python analysis scripts.",
+        "results/  Generated summaries and figures.",
+        "```",
+        "",
+        "## Dataset",
+        "",
+        "- **FC1**: fuel-cell durability test operated in a stationary regime",
+        "- **FC2**: fuel-cell durability test operated under dynamic current",
+        "- **Source**: https://search-data.ubfc.fr/FR-18008901306731-2021-07-19_IEEE-PHM-Data-Challenge-2014.html#pub_col_ver",
+        "",
+        "The dataset includes ageing, polarization, and electrochemical impedance spectroscopy (EIS) measurements.",
+        "",
+        "## Quick Analysis",
+        "",
+        "Run the analysis script from the repository root:",
+        "",
+        "```bash",
+        "python code/main.py",
+        "```",
+        "",
+        "The script reads the Excel/CSV files under `data/` and writes figures plus summary tables to `results/`.",
+        "",
+        "## Key Results",
+        "",
+        "| Fuel Cell | Duration (h) | Initial Utot (V) | Final Utot (V) | Voltage Drop (V) | Degradation Rate (mV/h) |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
+        *[
+            f"| {row['Fuel Cell']} | {row['Duration (h)']:.1f} | {row['Initial Utot (V)']:.3f} | {row['Final Utot (V)']:.3f} | {row['Voltage Drop (V)']:.3f} | {row['Degradation Rate (mV/h)']:.3f} |"
+            for _, row in summary.iterrows()
+        ],
+        "",
+        "FC2 shows a larger voltage loss and a faster degradation rate than FC1, consistent with the stronger stress expected from dynamic-current operation.",
+        "",
+        "## Summary Table",
+        "",
+        *markdown_table(summary),
         "",
         "## Figures",
         "",
         "- `figures/ageing_voltage_degradation.png`: stack voltage and cell imbalance during ageing",
         "- `figures/ageing_channels/`: individual ageing plots for every numeric channel",
-        "- `figures/polarization/`: individual polarization plots",
-        "- `figures/eis/`: individual EIS Nyquist plots using raw data with sign-flipped imaginary impedance",
+        "- `figures/polarization/`: individual polarization plots using scatter points with dashed guide lines",
+        "- `figures/eis/`: individual EIS Nyquist plots using raw data with sign-corrected imaginary impedance",
+        "",
+        "### Ageing Voltage Degradation",
+        "",
+        "![Ageing voltage degradation](results/figures/ageing_voltage_degradation.png)",
         "",
         "## Ageing Parameter Notes",
         "",
@@ -382,14 +430,20 @@ def write_results_readme(
         "",
         "## Individual Polarization Figures",
         "",
-        *[f"- `{path}`: {label}" for label, path in polarization_figures],
+        *[
+            f"### {label}\n\n![{label}](results/{path})"
+            for label, path in polarization_figures
+        ],
         "",
         "## Individual EIS Figures",
         "",
-        *[f"- `{path}`: {label}" for label, path in eis_figures],
+        *[
+            f"### {label}\n\n![{label}](results/{path})"
+            for label, path in eis_figures
+        ],
         "",
     ]
-    (RESULTS_DIR / "README.md").write_text("\n".join(lines), encoding="utf-8")
+    (ROOT / "README.md").write_text("\n".join(lines), encoding="utf-8")
 
 
 def main() -> None:
@@ -407,7 +461,7 @@ def main() -> None:
     ageing_figures = plot_ageing_channel_figures(ageing)
     polarization_figures = plot_polarization(polarization)
     eis_figures = plot_eis(eis)
-    write_results_readme(summary, ageing_figures, polarization_figures, eis_figures)
+    write_main_readme(summary, ageing_figures, polarization_figures, eis_figures)
 
     print("Analysis complete")
     print(summary.to_string(index=False))
